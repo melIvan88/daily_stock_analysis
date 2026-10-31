@@ -34,6 +34,8 @@ jobs:
     # 兼容误将 STOCK_LIST 配到同名 Environment variables 的场景；
     # 推荐位置仍是 Settings -> Secrets and variables -> Actions -> Repository variables。
     environment: STOCK_LIST
+    permissions:
+      contents: write
     # 添加超时限制，防止任务卡死
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
     
@@ -570,6 +572,26 @@ jobs:
             logs/
           retention-days: 30
       
+      - name: 保存报告到 reports 分支
+        if: always()
+        run: |
+          if [ ! -d reports ] || [ -z "$(ls -A reports)" ]; then echo "没有报告可保存"; exit 0; fi
+          day=$(TZ=Australia/Melbourne date +%Y-%m-%d_%H%M)
+          mkdir -p /tmp/out && cp -r reports/. /tmp/out/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch -q origin reports 2>/dev/null; then
+            git checkout -q -B reports FETCH_HEAD
+          else
+            git checkout -q --orphan reports
+            git rm -rqf . || true
+          fi
+          git clean -fdxq
+          mkdir -p "$day" && cp -r /tmp/out/. "$day/"
+          git add "$day"
+          git commit -qm "报告 $day" && git push -q origin reports
+          echo "报告已保存到 reports 分支：$day"
+
       - name: 显示运行结果
         if: always()
         run: |
